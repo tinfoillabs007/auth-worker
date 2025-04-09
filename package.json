@@ -1,0 +1,24 @@
+{
+  "name": "auth-worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloudflare Worker acting as the OAuth 2.1 and Passkey Authentication Server.",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "echo \"Error: no test specified yet\" && exit 1",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "^0.0.2",
+    "hono": "^4.2.9",
+    "jose": "^5.3.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240405.0",
+    "typescript": "^5.4.5",
+    "wrangler": "^3.51.0"
+  },
+  "module": "src/index.ts"
+}
