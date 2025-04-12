@@ -35,7 +35,7 @@ import {
 	escapeHtml
 } from './oauth-helpers';
 // Import types using 'import type'
-import type { TemporaryOAuthState } from './oauth-helpers';
+import type { TemporaryOAuthState as OriginalTemporaryOAuthState } from './oauth-helpers';
 import type { ClientInfo, AuthRequest, CompleteAuthorizationOptions, OAuthHelpers } from '@cloudflare/workers-oauth-provider';
 // Import types using 'import type' and values separately if needed (getValidScopeInfo is a value)
 import { getValidScopeInfo } from './scopes';
@@ -51,6 +51,8 @@ type HandlerContext = HonoContext<{ Bindings: Env & { OAUTH_PROVIDER: OAuthHelpe
 // --- Constants ---
 const STATE_TTL_SECONDS = 600; // 10 minutes TTL for temporary state in KV
 
+// --- Update TemporaryOAuthState type ---
+type TemporaryOAuthState = OriginalTemporaryOAuthState;
 
 // --- Client Validation Helper ---
 
@@ -362,7 +364,6 @@ function getConsentPageHtml(sessionId: string, client: ClientInfo, scopes: Scope
 </html>`;
 }
 
-
 // --- Authorization Endpoint Handlers ---
 
 /**
@@ -473,12 +474,15 @@ export async function handleAuthorizeGetRequest(c: HandlerContext): Promise<Resp
 	}
 }
 
+// --- Define Hanko User type (REMOVE - not needed here anymore) ---
+// interface HankoUser { ... }
+
 /**
  * Handles the POST /authorize request *after* successful Hanko authentication via iframe.
  */
 export async function handleAuthorizePostHankoSuccess(c: HandlerContext): Promise<Response> {
 	const { env } = c;
-	const providerHelpers = env.OAUTH_PROVIDER; // Helpers injected by the library
+	const providerHelpers = env.OAUTH_PROVIDER;
 	console.log("[handleAuthorizePostHankoSuccess] START");
 
 	if (!providerHelpers) {
@@ -519,7 +523,7 @@ export async function handleAuthorizePostHankoSuccess(c: HandlerContext): Promis
 		}
         console.log("[handleAuthorizePostHankoSuccess] Status validation successful.");
 
-		// 4. Update stored state
+		// 4. Update stored state (JUST hankoUserId and status)
 		storedState.hankoUserId = hankoUserId;
 		storedState.status = 'pending_consent';
 		await storeTemporaryOAuthState(env, sessionId, storedState, STATE_TTL_SECONDS);
@@ -552,7 +556,7 @@ export async function handleAuthorizePostHankoSuccess(c: HandlerContext): Promis
 			await deleteTemporaryOAuthState(env, sessionId).catch(e => console.error("Error cleaning up state during Hanko Success error handling:", e));
 		}
 		if (storedState && !(error as any).redirect_uri) (error as any).redirect_uri = storedState.redirectUri;
-		if (storedState && !(error as any).state) (error as any).state = storedState.state;
+        if (storedState && !(error as any).state) (error as any).state = storedState.state;
 		throw error; // Re-throw for the main Hono onError handler
 	}
 }
@@ -594,11 +598,11 @@ export async function handleAuthorizePostConsent(c: HandlerContext): Promise<Res
 		}
         console.log("[handleAuthorizePostConsent] Retrieved stored state:", storedState);
 
-		// 3. Validate status and presence of Hanko user ID
-		if (storedState.status !== 'pending_consent' || !storedState.hankoUserId) {
+		// 3. Validate status and presence of Hanko user ID (REMOVE EMAIL CHECK)
+		if (storedState.status !== 'pending_consent' || !storedState.hankoUserId /* || !storedState.userEmail */) { // <-- REMOVE EMAIL CHECK
 			console.error(`Invalid state for consent submission: Status='${storedState.status}', HankoUserID=${storedState.hankoUserId ? 'present' : 'missing'}. Session: ${sessionId}`);
 			await deleteTemporaryOAuthState(env, sessionId);
-			const error = new Error("Invalid session state during consent.");
+			const error = new Error("Invalid session state during consent (missing user details).");
 			(error as any).error = 'invalid_request';
 			throw error;
 		}
@@ -632,7 +636,7 @@ export async function handleAuthorizePostConsent(c: HandlerContext): Promise<Res
         const grantedScopes = getValidScopeInfo(storedState.scope).map(s => s.name);
         console.log(`[handleAuthorizePostConsent] Granted scopes: ${grantedScopes.join(' ')}`);
 
-		// 7. Prepare options for completeAuthorization
+		// 7. Prepare options for completeAuthorization (REMOVE EMAIL FROM PROPS)
 		const authRequestForCompletion: AuthRequest = {
 			responseType: storedState.responseType,
 			clientId: storedState.clientId,
@@ -645,10 +649,14 @@ export async function handleAuthorizePostConsent(c: HandlerContext): Promise<Res
 
 		const completeAuthOptions: CompleteAuthorizationOptions = {
 			request: authRequestForCompletion,
-			userId: storedState.hankoUserId,
+			userId: storedState.hankoUserId, 
 			metadata: { authenticated_via: 'hanko', original_session_id: sessionId },
 			scope: grantedScopes,
-			props: { hankoUserId: storedState.hankoUserId, /* email: 'user@example.com' // TODO: Fetch actual user email? */ }
+            // Only include hankoUserId in props now
+			props: { 
+                hankoUserId: storedState.hankoUserId 
+                // email: storedState.userEmail // <-- REMOVE EMAIL HERE 
+            }
 		};
         console.log("[handleAuthorizePostConsent] Prepared options for completeAuthorization:", completeAuthOptions);
 

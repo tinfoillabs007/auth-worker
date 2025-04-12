@@ -227,17 +227,39 @@ function getProviderOptions(request: Request, env: Env) {
         jwksEndpoint: '/.well-known/jwks.json', // Handled by defaultApp
         clientRegistrationEndpoint: '/register',
         // apiRoute and apiHandler are handled by library if requests match
-        apiRoute: '/api/', // Example, adjust as needed if library handles some API routes
-        apiHandler: { // Placeholder if library expects it
+        apiRoute: '/api/', // Define the base path for API routes handled by this handler
+        apiHandler: { 
+            // This handler receives requests ONLY if they have a valid access token matching /api/
             async fetch(
-                apiRequest: Request,
-                apiEnv: any,
-                apiCtx: ExecutionContext
+                request: Request,
+                env: Env & { OAUTH_PROVIDER: OAuthHelpers }, // Env might include helpers here too
+                ctx: ExecutionContext & { props?: Record<string, any> } // Context includes props!
             ): Promise<Response> {
-                 console.log(`Auth Server: Library's apiHandler received request for ${apiRequest.url} - returning 404.`);
+                 const url = new URL(request.url);
+                 console.log(`[apiHandler] Received request for ${url.pathname}`);
+                 
+                 // ---> Implement /api/me endpoint <-----
+                 if (url.pathname === '/api/me') {
+                     const userProps = ctx.props; // Get props associated with the access token
+                     console.log("[api/me] User props from token:", userProps);
+
+                     // Return only what's available in props
+                     const userInfo = {
+                         hankoUserId: userProps?.hankoUserId || null // Use optional chaining
+                         // Remove email/name as they are no longer passed in props
+                         // email: userProps?.email,
+                         // name: userProps?.name || null,
+                     };
+                     console.log("[api/me] Returning user info:", userInfo);
+                     return new Response(JSON.stringify(userInfo), { status: 200, headers: { 'Content-Type': 'application/json' } });
+                 }
+                 // ---> End /api/me endpoint <-----
+                 
+                 // Default 404 for other /api/ routes not handled
+                 console.log(`[apiHandler] Path ${url.pathname} not found.`);
                  return new Response(JSON.stringify({
                     error: 'not_found',
-                    message: 'API routes are not directly handled by this authentication server setup.'
+                    message: `API endpoint ${url.pathname} not found.`
                  }), {
                     status: 404,
                     headers: { 'Content-Type': 'application/json' }

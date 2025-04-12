@@ -76,4 +76,7 @@ export interface Env {
 	MCP_WORKER_URL: string;
 
 	// Add any other bindings or variables defined in wrangler.toml
+
+	// Add the optional Hanko Backend API Key
+	HANKO_BACKEND_API_KEY?: string;
 }
